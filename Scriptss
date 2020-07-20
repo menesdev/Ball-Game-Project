@@ -1,0 +1,440 @@
+//BallController.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using JetBrains.Annotations;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class BallController : MonoBehaviour
+{
+    [SerializeField] private float _hareketHizi = 1f;
+
+    [SerializeField] private float _ziplamaHizi = 1f;
+
+    [SerializeField] private float _havadaHareketHizi = 1f;
+
+    [CanBeNull] private Rigidbody _rigidbody;
+
+    private bool _yerdeMi;
+
+
+    private void Start()
+    {
+        _rigidbody = GetComponent<Rigidbody>();
+    }
+
+    private void Update()
+    {
+        CheckInput();
+    }
+
+
+
+    private void CheckInput()
+    {
+        if (Input.GetKey(KeyCode.D))
+        {
+            Move(Vector3.right);
+        }
+        else if (Input.GetKey(KeyCode.A))
+        {
+            Move(Vector3.left);
+        }
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Jump();
+        }
+
+        if (Input.GetKey(KeyCode.Escape))
+        {
+            Application.Quit();
+        }
+    }
+
+    private void Move(Vector3 direction)
+    {
+        if (!_yerdeMi)
+        {
+            _rigidbody.AddForce(direction * _havadaHareketHizi, ForceMode.Acceleration);
+        }
+        else
+        {
+           _rigidbody.AddForce(direction * _hareketHizi, ForceMode.Acceleration); 
+        }
+    }
+
+    private void Jump()
+    {
+        if (!_yerdeMi)
+        {
+            return;
+        }
+
+        _rigidbody.AddForce(Vector3.up * _ziplamaHizi, ForceMode.Impulse);
+    }
+
+    private void OnCollisionEnter(Collision other)
+    {
+        _yerdeMi = true;
+
+        bool yereDustuMu = other.collider.GetComponent<IfBallFall>();
+
+        bool dusmanaCarptiMi = other.collider.GetComponent<Enemy>();
+
+        if (dusmanaCarptiMi)
+        {
+            if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, Mathf.Infinity))
+            {
+                Enemy enemy = hit.collider.GetComponent<Enemy>();
+                bool dusmaninUstundeMi = enemy != null;
+                if (dusmaninUstundeMi)
+                {
+                    enemy.Die();
+                }
+                else
+                {
+                    Die();
+                }
+            }
+
+            Debug.DrawRay(transform.position, Vector3.down * 0.1f, Color.blue, 3f);
+        }
+
+        if (yereDustuMu)
+        {
+            Die();
+        }
+    }
+
+    private void OnCollisionExit(Collision other)
+    {
+        _yerdeMi = false;
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        Collectible toplanabilir = other.GetComponent<Collectible>();
+        bool toplanabilirMi = toplanabilir != null;
+
+        if (toplanabilirMi)
+        {
+            toplanabilir.Collect();
+        }
+    }
+
+    private void Die()
+    {
+        //Yeniden dogma
+        StartCoroutine(SahneDegistir());
+
+        GetComponent<MeshRenderer>().enabled = false;
+    }
+
+    //Sahneyi yeniden yukle.
+    private IEnumerator SahneDegistir()
+    {
+        yield return new WaitForSeconds(1f);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+ 
+}
+
+
+
+
+//CameraFollow.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class CameraFollow : MonoBehaviour
+{
+    [SerializeField] 
+    private Transform _hedef;
+
+    [SerializeField] 
+    private float _yumusaklik;
+
+    [SerializeField] 
+    private Vector3 _ilkPozisyon;
+
+    private void FixedUpdate()
+    {
+        if (_hedef == null)
+        {
+            return;
+        }
+
+        transform.position = Vector3.Lerp(transform.position, _hedef.position + _ilkPozisyon, Time.deltaTime * _yumusaklik);
+    }
+}
+
+
+//Collectible.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Collectible : MonoBehaviour
+{
+    
+    public void Collect()
+    {
+        FindObjectOfType<ScoreManager>().SkorEkle(1);
+        
+        Destroy(gameObject);
+    }
+    
+    
+}
+
+
+
+//Enemy.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using UnityEngine;
+
+public class Enemy : MonoBehaviour
+{
+    [SerializeField] private float _gezinmeAraligi;
+    [SerializeField] private float _hareketHizi;
+
+    private Vector3 _ilkPozisyon;
+    private Vector3 _minGezmePozisyonu;
+    private Vector3 _maksGezmePozisyonu;
+    private Vector3 _hedefNoktasi;
+
+    private GameObject _para;
+    
+
+    private void Awake()
+    {
+        _ilkPozisyon = transform.position;
+
+        _minGezmePozisyonu = _ilkPozisyon + (Vector3.left * _gezinmeAraligi);
+        _maksGezmePozisyonu = _ilkPozisyon + (Vector3.right * _gezinmeAraligi);
+
+        UzaklikBelirle(_maksGezmePozisyonu);
+        
+        ResourcesKlasorundenParaYukle();
+    }
+
+    private void UzaklikBelirle(Vector3 mesafe)
+    {
+        _hedefNoktasi = mesafe;
+    }
+
+    private void Update()
+    {
+        if (Math.Abs(Vector3.Distance(transform.position, _maksGezmePozisyonu)) < 0.1f)
+        {
+            UzaklikBelirle(_minGezmePozisyonu);
+        }
+        else if (Math.Abs(Vector3.Distance(transform.position, b: _minGezmePozisyonu)) < 0.1f)
+        {
+            UzaklikBelirle(_maksGezmePozisyonu);
+        }
+
+        transform.position = Vector3.MoveTowards(transform.position, _hedefNoktasi, Time.deltaTime * _hareketHizi);
+    }
+
+    private void ResourcesKlasorundenParaYukle()
+    {
+        _para = Resources.Load<GameObject>("Para");
+    }
+
+    public void Die()
+    {
+        Instantiate(_para, transform.position, transform.rotation);
+        
+        Destroy(gameObject);
+    }
+}
+
+
+// ExitGame.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class ExitGame : MonoBehaviour
+{
+    public void Exit()
+    {
+        Application.Quit();
+    }
+}
+
+
+
+//ExitLastScene.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class ExitLastScene : MonoBehaviour
+{
+    private void Update()
+    {
+        QuitGame();
+    }
+
+    private void QuitGame()
+    {
+        if(Input.GetKey(KeyCode.Escape))
+        {
+            Application.Quit();
+        }
+    }
+}
+
+
+//IfBallFall.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class IfBallFall : MonoBehaviour
+{
+    private bool _dustuMu;
+
+    private void OnCollisionEnter(Collision other)
+    {
+        _dustuMu = true;
+        
+    }
+
+    private void OnCollisionExit(Collision other)
+    {
+        _dustuMu = false;
+    }
+}
+
+
+
+//LastScore.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SocialPlatforms.Impl;
+using UnityEngine.UI;
+
+public class LastScore : MonoBehaviour
+{
+    [SerializeField]
+    private Text _sonSkorYazisi;
+    
+    public int _sonSkor;
+
+    private const string SCORE_KEY = "Skor";
+    
+    private void Awake()
+    {
+        _sonSkor = GetComponent<ScoreManager>()._skor;
+
+        SkoruYazdir();
+    }
+
+    private void SkoruYazdir()
+    {
+        _sonSkorYazisi.text = _sonSkor.ToString("N0");
+    }
+}
+
+
+
+//LevelEndZone.cs
+
+using System;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class LevelEndZone : MonoBehaviour
+{
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.GetComponent<BallController>() != null)
+        {
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
+        }
+    }
+}
+
+
+
+//ScoreManager.cs
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+public class ScoreManager : MonoBehaviour
+{
+    [SerializeField]
+    public Text _skorYazisi;
+
+    public int _skor;
+
+    public const string SKOR_ANAHTARI = "Skor";
+
+    private void Awake()
+    {
+        if (SceneManager.GetActiveScene().buildIndex != 0 && SceneManager.GetActiveScene().buildIndex != 1 )
+        {
+            _skor = PlayerPrefs.GetInt(SKOR_ANAHTARI);
+        }
+
+        SkoruGuncelle();
+    }
+
+    public void SkoruGuncelle()
+    {
+        _skorYazisi.text = _skor.ToString("N0");
+    }
+
+    public void SkorEkle(int miktar)
+    {
+        _skor += miktar;
+        
+        SkoruGuncelle();
+        
+        PlayerPrefs.SetInt(SKOR_ANAHTARI, _skor);
+    }
+}
+
+
+
+//StartButton.cs
+
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class StartButton : MonoBehaviour
+{
+    public void StartGame()
+    {
+        SceneManager.LoadScene(1);
+    }
+}
